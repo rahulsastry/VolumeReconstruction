@@ -30,6 +30,9 @@
 #include "metaImage.h"
 
 #include "vtkMath.h"
+#include <cmath>
+#include <vector>
+#include <iostream>
 
 vtkCxxRevisionMacro(vtkVolumeReconstructor, "$Revisions: 1.0 $");
 vtkStandardNewMacro(vtkVolumeReconstructor);
@@ -416,30 +419,50 @@ PlusStatus vtkVolumeReconstructor::AddTrackedFrame(TrackedFrame* frame, vtkTrans
 
   this->Modified();
 
+  std::cout << "Begin voodoo" << std::endl;
   // initialize variables 
-  double currentLeftAngle = 0;
-  double currentRightAngle = 0;
+  double currentLeftAngle = -60;
+  double currentRightAngle = 60;
   double detectedLeftAngle = 0;
   double detectedRightAngle = 0;
   double xOrigin = 0;
   double yOrigin = 0;
- 
-  // get current fan angle and origin
-  this->Reconstructor->GetFanAngles(&currentStartAngle, &currentStopAngle);
-  this->Reconstructor->GetOrigin(&xOrigin, &yOrigin);
   
+  std::cout << "Initialized some variables" << std::endl;
+
+  // get current fan angle and origin
+  this->Reconstructor->GetFanAngles(currentLeftAngle, currentRightAngle);
+  this->Reconstructor->GetFanOrigin(xOrigin, yOrigin);
+  
+  std::cout << "Initial Left Angle" << currentLeftAngle << std::endl;
+  std::cout << "Initial Right Angle" << currentRightAngle << std::endl;
   // solicit new fan angles
   this->FanAngleDetector(frameImage, currentLeftAngle, currentRightAngle, detectedLeftAngle, detectedRightAngle, xOrigin, yOrigin);
-  
+
+  std::cout << "Final Left Angle" << detectedLeftAngle << std::endl;
+  std::cout << "Final Right Angle" << detectedRightAngle << std::endl;  
+
+  std::cout << "We finished the voodoo?" << std::endl;
+
   // implement and wrap up 
-  this->Reconstructor->SetFanAngles(&detectedLeftAngle, &detectedRightAngle);
-  return this->Reconstructor->InsertSlice(frameImage, imageToReferenceTransformMatrix);
+  this->Reconstructor->SetFanAngles(detectedLeftAngle, detectedRightAngle);
+  PlusStatus temp;
+  
+  if (detectedLeftAngle == 0.0 && detectedRightAngle == 0) {
+	
+	temp = PLUS_SUCCESS;
+	std::cout << "BLANK FRAME SKIPPED" << std::endl;
+	
+  } else {
+  
+	temp = this->Reconstructor->InsertSlice(frameImage, imageToReferenceTransformMatrix);
+	this->Reconstructor->SetFanAngles(currentLeftAngle, currentRightAngle); 
+  
+  }  
+
+  return temp;
 
   // restore original fan angles
-  currentLeftAngle = 0;
-  currentRightAngle = 0;
-  detectedLeftAngle = 0;
-  detectedRightAngle = 0;
   
 }
 
@@ -740,9 +763,9 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 	double testRadius2 = 380;
 	double testRadius3 = 480;
 	double angularResolution = 1;
-	double thetaIncrement1 = angularResolution/testRadius1 * (180 / Pi()); 
-	double thetaIncrement2 = angularResolution/testRadius2 * (180 / Pi()); 
-	double thetaIncrement3 = angularResolution/testRadius3 * (180 / Pi()); 
+	double thetaIncrement1 = angularResolution/testRadius1 * (180 / vtkMath::Pi()); 
+	double thetaIncrement2 = angularResolution/testRadius2 * (180 / vtkMath::Pi()); 
+	double thetaIncrement3 = angularResolution/testRadius3 * (180 / vtkMath::Pi()); 
 
 	// Angle Detection
 	double nPix  = 20;
@@ -758,92 +781,105 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 
 	// determine angles to be sampled and query data for them 
 
-	double testTheta1[];
-	double testTheta2[];
-	double testTheta3[];
+	std::vector<double> testTheta1;
+	std::vector<double> testTheta2;
+	std::vector<double> testTheta3;
 
-	testTheta1[0] = presetAngleLeft;
-	testTheta2[0] = presetAngleLeft;
-	testTheta3[0] = presetAngleLeft;
+	testTheta1.push_back(presetAngleLeft);
+	testTheta2.push_back(presetAngleLeft);
+	testTheta3.push_back(presetAngleLeft);
 
-	int testX1 = round(xOrigin + testRadius1*sin(RadiansFromDegrees(testTheta1[0])));
-	int testX2 = round(xOrigin + testRadius2*sin(RadiansFromDegrees(testTheta2[0])));
-	int testX3 = round(xOrigin + testRadius3*sin(RadiansFromDegrees(testTheta3[0])));
-	int testY1 = round(yOrigin + testRadius1*cos(RadiansFromDegrees(testTheta1[0])));
-	int testY2 = round(yOrigin + testRadius2*cos(RadiansFromDegrees(testTheta2[0])));
-	int testY3 = round(yOrigin + testRadius3*cos(RadiansFromDegrees(testTheta3[0])));
+	int testX1 = vtkMath::Round(xOrigin + testRadius1*sin(vtkMath::RadiansFromDegrees(testTheta1[0])));
+	int testX2 = vtkMath::Round(xOrigin + testRadius2*sin(vtkMath::RadiansFromDegrees(testTheta2[0])));
+	int testX3 = vtkMath::Round(xOrigin + testRadius3*sin(vtkMath::RadiansFromDegrees(testTheta3[0])));
+	int testY1 = vtkMath::Round(yOrigin + testRadius1*cos(vtkMath::RadiansFromDegrees(testTheta1[0])));
+	int testY2 = vtkMath::Round(yOrigin + testRadius2*cos(vtkMath::RadiansFromDegrees(testTheta2[0])));
+	int testY3 = vtkMath::Round(yOrigin + testRadius3*cos(vtkMath::RadiansFromDegrees(testTheta3[0])));
+	
+	std::cout << testX1 << std::endl;
+	std::cout << testY1 << std::endl;
+	std::cout << frameImage->GetScalarTypeAsString() << std::endl;
 
-	double* testValue1[0] = static_cast<double*>(frameImage->GetScalarPointer(testX1,testY1,0));
-	double* testValue2[0] = static_cast<double*>(frameImage->GetScalarPointer(testX2,testY2,0));
-	double* testValue3[0] = static_cast<double*>(frameImage->GetScalarPointer(testX2,testY2,0));
+	std::vector<unsigned char> testValue1; 
+	std::vector<unsigned char> testValue2;
+	std::vector<unsigned char> testValue3;
+
+	
+	testValue1.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX1,testY1,0)));
+	testValue2.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX2,testY2,0)));
+	testValue3.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX2,testY2,0)));
+	
+
 
 	int i = 0;
 
-	while (true) {
-
-		 if (testTheta1[i] + thetaIncrement1 <= presetAngleRight) {
-		 
-			testTheta1[i+1] = testTheta1[i] + thetaIncrement1;
-			testX1 = round(xOrigin + testRadius1*sin(RadiansFromDegrees(testTheta1[i+1])));
-			testY1 = round(yOrigin + testRadius1*cos(RadiansFromDegrees(testTheta1[i+1])));
-			testValue1[i+1] = static_cast<double*>(frameImage->GetScalarPointer(testX1,testY1,0));
-		 
-		 }
-
-		 if (testTheta2[i] + thetaIncrement2 <= presetAngleRight) {
-		 
-			testTheta2[i+1] = testTheta2[i] + thetaIncrement2;
-			testX2 = round(xOrigin + testRadius2*sin(RadiansFromDegrees(testTheta2[i+1])));
-			testY2 = round(yOrigin + testRadius2*cos(RadiansFromDegrees(testTheta2[i+1])));
-			testValue2[i+1] = static_cast<double*>(frameImage->GetScalarPointer(testX2,testY2,0));
-			
-		 }
-		 
-		 if (testTheta3[i] + thetaIncrement3 > presetAngleRight) {
-		 
-			break;
-			
-		 } else {
-		 
-			testTheta3[i+1] = testTheta3[i] + thetaIncrement3;
-			testX3 = round(xOrigin + testRadius3*sin(RadiansFromDegrees(testTheta3[i+1])));
-			testY3 = round(yOrigin + testRadius3*cos(RadiansFromDegrees(testTheta3[i+1])));
-			testValue3[i+1] = static_cast<double*>(frameImage->GetScalarPointer(testX3,testY3,0));	 
-		 }
-		 
-		 
+	while (testTheta1[i] + thetaIncrement1 <= presetAngleRight) {
+	
+		testTheta1.push_back(testTheta1[i] + thetaIncrement1);
+		testX1 = vtkMath::Round(xOrigin + testRadius1*sin(vtkMath::RadiansFromDegrees(testTheta1[i+1])));
+		testY1 = vtkMath::Round(yOrigin + testRadius1*cos(vtkMath::RadiansFromDegrees(testTheta1[i+1])));
+		testValue1.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX1,testY1,0)));
+		//std::cout << (int) testValue1[i] << std::endl;
 		i++;
+	
+	}
+	
+	i = 0;
+	
+	while (testTheta2[i] + thetaIncrement2 <= presetAngleRight) {
+
+		testTheta2.push_back(testTheta2[i] + thetaIncrement2);
+		testX2 = vtkMath::Round(xOrigin + testRadius2*sin(vtkMath::RadiansFromDegrees(testTheta2[i+1])));
+		testY2 = vtkMath::Round(yOrigin + testRadius2*cos(vtkMath::RadiansFromDegrees(testTheta2[i+1])));
+		testValue2.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX2,testY2,0)));
+		i++;
+			
+	}
+	
+	i = 0;
+	
+	while (testTheta3[i] + thetaIncrement3 <= presetAngleRight) {
+	
+		testTheta3.push_back(testTheta3[i] + thetaIncrement3);
+		testX3 = vtkMath::Round(xOrigin + testRadius3*sin(vtkMath::RadiansFromDegrees(testTheta3[i+1])));
+		testY3 = vtkMath::Round(yOrigin + testRadius3*cos(vtkMath::RadiansFromDegrees(testTheta3[i+1])));
+		testValue3.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX3,testY3,0)));
+		i++;
+	
 	}
 
+	std::cout << testTheta1.size() << std::endl;
+	std::cout << testTheta2.size() << std::endl;
+	std::cout << testTheta3.size() << std::endl;
 	// Find the limiting fan angles
 
 
-	double fanAngles[nRadii][2];
+	std::vector< std::vector<double> > fanAngles(nRadii, std::vector<double>(2));
 
-	for (int i = 0, i < nRadii, i++) {
+	for (int i = 0; i < nRadii; i++) {
 
-		for (int j = 0, j < 2, j++) {
+		for (int j = 0; j < 2; j++) {
 		
 			fanAngles[i][j] = 0;
 			
 		}
 	}
 
-	double leftTest[nRadii][nPix];
-	double rightTest[nRadii][nPix];
-
+	std::vector< std::vector<double> > leftTest(nRadii, std::vector<double>(nPix));
+	std::vector< std::vector<double> > rightTest(nRadii, std::vector<double>(nPix));
+	
 	int nTheta1 = testTheta1.size();
 	int nTheta2 = testTheta2.size();
 	int nTheta3 = testTheta3.size();
 
-	j = nPix;
+	int j = nPix;
 
 	while (true) {
 
 		if (j <= nTheta1 &&
 		testTheta1[j] < 0 &&
-		testTheta1[nTheta1 - j] >0 &&
-		(fanAngles[test1][left] != 0 && fanAngles[test1][right] != 0)) {
+		testTheta1[nTheta1 - j] > 0 &&
+		(fanAngles[test1][left] == 0 || fanAngles[test1][right] == 0)) {
 		
 			double leftCount = 0;
 			double rightCount = 0;
@@ -854,15 +890,19 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 			
 			}
 			
+			// std::cout << testTheta1[nTheta1 - j + nPix - 1] << ", " << rightCount << std::endl;
+			
 			if (leftCount >= nPix/2.0 && fanAngles[test1][left] == 0) {
 				
 				fanAngles[test1][left] = testTheta1[j - nPix];
+				std::cout << "1left " << testTheta1[j - nPix] << std::endl;
 			
 			}
 			
-			if (rightCount >= nPix/2.0 && fanAngles[test1][left] == 0) {
+			if (rightCount >= nPix/2.0 && fanAngles[test1][right] == 0) {
 			
 				fanAngles[test1][right] = testTheta1[nTheta1 - j + nPix -1];
+				std::cout << "1right " << testTheta1[nTheta1 - j + nPix -1] << std::endl;
 				
 			}
 		
@@ -871,7 +911,7 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 		if (j <= nTheta2 &&
 		testTheta2[j] < 0 &&
 		testTheta2[nTheta2 - j] >0 &&
-		(fanAngles[test2][left] != 0 && fanAngles[test2][right] != 0)) {
+		(fanAngles[test2][left] == 0 || fanAngles[test2][right] == 0)) {
 		
 			double leftCount = 0;
 			double rightCount = 0;
@@ -885,19 +925,21 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 			if (leftCount >= nPix/2.0 && fanAngles[test2][left] == 0) {
 				
 				fanAngles[test2][left] = testTheta2[j - nPix];
-			
+				std::cout << "2left " << testTheta2[j - nPix] << std::endl;
+				
 			}
 			
-			if (rightCount >= nPix/2.0 && fanAngles[test2][left] == 0) {
+			if (rightCount >= nPix/2.0 && fanAngles[test2][right] == 0) {
 			
 				fanAngles[test2][right] = testTheta2[nTheta2 - j + nPix -1];
+				std::cout << "2right " << testTheta2[nTheta2 - j + nPix -1] << std::endl;
 				
 			}
 		
 		}	
 		
 		if (j <= nTheta3) {
-		
+			
 			double leftCount = 0;
 			double rightCount = 0;
 			for (int k = 0; k < nPix; k++) {
@@ -910,12 +952,14 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 			if (leftCount >= nPix/2.0 && fanAngles[test3][left] == 0) {
 				
 				fanAngles[test3][left] = testTheta3[j - nPix];
+				std::cout << "3left " << testTheta3[j - nPix] << std::endl;
 			
 			}
 			
-			if (rightCount >= nPix/2.0 && fanAngles[test3][left] == 0) {
+			if (rightCount >= nPix/2.0 && fanAngles[test3][right] == 0) {
 			
 				fanAngles[test3][right] = testTheta3[nTheta3 - j + nPix -1];
+				std::cout << "3right " << testTheta3[nTheta3 - j + nPix -1] << std::endl;
 				
 			}
 		
@@ -923,9 +967,9 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 		
 		
 		int nonZeroFanAngles = 0;
-		for (int ii = 0, i < nRadii, ii++) {
+		for (int ii = 0; i < nRadii; ii++) {
 
-			for (int jj = 0, jj < 2, jj++) {
+			for (int jj = 0; jj < 2; jj++) {
 			
 				if (fanAngles[ii][jj] != 0) {nonZeroFanAngles++;}
 				
@@ -933,7 +977,7 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 		}
 		
 		if (nonZeroFanAngles == 6 ||
-		(testTheta3[j] > 0 && testTheta3[nTheta3 - j] < 0) {
+		(testTheta3[j] > 0 && testTheta3[nTheta3 - j] < 0)) {
 		
 			break;
 		
@@ -943,12 +987,14 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 
 	}
 	
+	std::cout << "Completed the detection loop?!" << std::endl;
+	
 	outputAngleLeft = 0;
 	outputAngleRight = 0;
-	for (int ii = 0; ii < nRadii; ii+1) {
+	for (int ii = 0; ii < nRadii; ii++) {
 	
-		if (fanAngles[ii][left] <= outputAngleLeft) {outputAngleLeft = fanAngles[ii][left];)
-		if (fanAngles[ii][right] >= outputAngleRight) {outputAngleRight = fanAngles[ii][right];)
+		if (fanAngles[ii][left] <= outputAngleLeft) {outputAngleLeft = fanAngles[ii][left];}
+		if (fanAngles[ii][right] >= outputAngleRight) {outputAngleRight = fanAngles[ii][right];}
 	
 	}
 	
