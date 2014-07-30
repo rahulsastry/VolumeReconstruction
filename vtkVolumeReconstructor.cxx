@@ -448,18 +448,18 @@ PlusStatus vtkVolumeReconstructor::AddTrackedFrame(TrackedFrame* frame, vtkTrans
   this->Reconstructor->SetFanAngles(detectedLeftAngle, detectedRightAngle);
   PlusStatus temp;
   
-  if (detectedLeftAngle == 0.0 && detectedRightAngle == 0) {
+  if (detectedLeftAngle > -10.0 && detectedRightAngle < 10.0) {
 	
 	temp = PLUS_SUCCESS;
-	std::cout << "BLANK FRAME SKIPPED" << std::endl;
+	std::cout << ">>>>>>>>>>>>>BLANK FRAME SKIPPED<<<<<<<<<<<<<<<<<" << std::endl;
 	
   } else {
   
 	temp = this->Reconstructor->InsertSlice(frameImage, imageToReferenceTransformMatrix);
-	this->Reconstructor->SetFanAngles(currentLeftAngle, currentRightAngle); 
   
   }  
 
+  this->Reconstructor->SetFanAngles(currentLeftAngle, currentRightAngle); 
   return temp;
 
   // restore original fan angles
@@ -759,9 +759,9 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 {
 
 	int nRadii = 3;
-	double testRadius1 = 280;
+	double testRadius1 = 340;
 	double testRadius2 = 380;
-	double testRadius3 = 480;
+	double testRadius3 = 420; //480
 	double angularResolution = 1;
 	double thetaIncrement1 = angularResolution/testRadius1 * (180 / vtkMath::Pi()); 
 	double thetaIncrement2 = angularResolution/testRadius2 * (180 / vtkMath::Pi()); 
@@ -769,7 +769,7 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 
 	// Angle Detection
 	double nPix  = 20;
-	double threshold = 26;
+	double threshold = 35; //26
 	double buffer = 0; //degrees
 
 	// Indecies and definitions 
