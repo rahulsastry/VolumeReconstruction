@@ -28,11 +28,6 @@
 
 #include "metaImage.h"
 
-#include "vtkMath.h"
-#include <cmath>
-#include <vector>
-#include <iostream>
-
 vtkCxxRevisionMacro(vtkVolumeReconstructor, "$Revisions: 1.0 $");
 vtkStandardNewMacro(vtkVolumeReconstructor);
 
@@ -88,9 +83,15 @@ PlusStatus vtkVolumeReconstructor::ReadConfiguration(vtkXMLDataElement* config)
   XML_READ_VECTOR_ATTRIBUTE_OPTIONAL(int, 2, ClipRectangleOrigin, reconConfig);
   XML_READ_VECTOR_ATTRIBUTE_OPTIONAL(int, 2, ClipRectangleSize, reconConfig);
 
-  XML_READ_VECTOR_ATTRIBUTE_OPTIONAL(double, 2, FanAngles, reconConfig);
-  XML_READ_VECTOR_ATTRIBUTE_OPTIONAL(double, 2, FanOrigin, reconConfig);
-  XML_READ_SCALAR_ATTRIBUTE_OPTIONAL(double, FanDepth, reconConfig);
+  XML_READ_VECTOR_ATTRIBUTE_OPTIONAL(double, 2, FanAngles, reconConfig);  // DEPRECATED (replaced by FanAnglesDeg)
+  XML_READ_VECTOR_ATTRIBUTE_OPTIONAL(double, 2, FanAnglesDeg, reconConfig);
+  
+  XML_READ_VECTOR_ATTRIBUTE_OPTIONAL(double, 2, FanOrigin, reconConfig);  // DEPRECATED (replaced by FanOriginPixel)
+  XML_READ_VECTOR_ATTRIBUTE_OPTIONAL(double, 2, FanOriginPixel, reconConfig);
+
+  XML_READ_SCALAR_ATTRIBUTE_OPTIONAL(double, FanDepth, reconConfig);   // DEPRECATED (replaced by FanRadiusStopPixel)
+  XML_READ_SCALAR_ATTRIBUTE_OPTIONAL(double, FanRadiusStartPixel, reconConfig);
+  XML_READ_SCALAR_ATTRIBUTE_OPTIONAL(double, FanRadiusStopPixel, reconConfig);
 
   XML_READ_SCALAR_ATTRIBUTE_OPTIONAL(int, SkipInterval, reconConfig);
   if (this->SkipInterval < 1)
@@ -153,18 +154,25 @@ PlusStatus vtkVolumeReconstructor::WriteConfiguration(vtkXMLDataElement *config)
   reconConfig->SetVectorAttribute("ClipRectangleOrigin", 2, this->Reconstructor->GetClipRectangleOrigin());
   reconConfig->SetVectorAttribute("ClipRectangleSize", 2, this->Reconstructor->GetClipRectangleSize());
 
-  // fan parameters
+  // Fan parameters
+  // remove deprecated attributes
+  XML_REMOVE_ATTRIBUTE(reconConfig, "FanDepth");
+  XML_REMOVE_ATTRIBUTE(reconConfig, "FanOrigin");
+  XML_REMOVE_ATTRIBUTE(reconConfig, "FanAngles");
   if (this->Reconstructor->FanClippingApplied())
   {
-    reconConfig->SetVectorAttribute("FanAngles", 2, this->Reconstructor->GetFanAngles());
-    reconConfig->SetVectorAttribute("FanOrigin", 2, this->Reconstructor->GetFanOrigin());
-    reconConfig->SetDoubleAttribute("FanDepth", this->Reconstructor->GetFanDepth());
+    reconConfig->SetVectorAttribute("FanAnglesDeg", 2, this->Reconstructor->GetFanAnglesDeg());
+    // Image spacing is 1.0, so reconstructor's fan origin and radius values are in pixels
+    reconConfig->SetVectorAttribute("FanOriginPixel", 2, this->Reconstructor->GetFanOrigin());
+    reconConfig->SetDoubleAttribute("FanRadiusStartPixel", this->Reconstructor->GetFanRadiusStart());
+    reconConfig->SetDoubleAttribute("FanRadiusStopPixel", this->Reconstructor->GetFanRadiusStop());
   }
   else
   {
-    XML_REMOVE_ATTRIBUTE(reconConfig, "FanAngles");
-    XML_REMOVE_ATTRIBUTE(reconConfig, "FanOrigin");
-    XML_REMOVE_ATTRIBUTE(reconConfig, "FanDepth");
+    XML_REMOVE_ATTRIBUTE(reconConfig, "FanAnglesDeg");
+    XML_REMOVE_ATTRIBUTE(reconConfig, "FanOriginPixel");
+    XML_REMOVE_ATTRIBUTE(reconConfig, "FanRadiusStartPixel");
+    XML_REMOVE_ATTRIBUTE(reconConfig, "FanRadiusStopPixel");
   }
 
   // reconstruction options
@@ -418,8 +426,7 @@ PlusStatus vtkVolumeReconstructor::AddTrackedFrame(TrackedFrame* frame, vtkTrans
 
   this->Modified();
 
-  std::cout << "Begin voodoo" << std::endl;
-  // initialize variables 
+    // initialize variables 
   double currentLeftAngle = -45;
   double currentRightAngle = 45;
   double detectedLeftAngle = 0;
@@ -448,10 +455,10 @@ PlusStatus vtkVolumeReconstructor::AddTrackedFrame(TrackedFrame* frame, vtkTrans
   PlusStatus temp;
   
   if (detectedLeftAngle > -10.0 && detectedRightAngle < 10.0) {
-	
+
 	temp = PLUS_SUCCESS;
 	std::cout << ">>>>>>>>>>>>>BLANK FRAME SKIPPED<<<<<<<<<<<<<<<<<" << std::endl;
-	
+
   } else {
   
 	temp = this->Reconstructor->InsertSlice(frameImage, imageToReferenceTransformMatrix);
@@ -462,7 +469,6 @@ PlusStatus vtkVolumeReconstructor::AddTrackedFrame(TrackedFrame* frame, vtkTrans
   return temp;
 
   // restore original fan angles
-  
 }
 
 //----------------------------------------------------------------------------
@@ -713,21 +719,51 @@ void vtkVolumeReconstructor::SetClipRectangleSize(int* size)
 }
 
 //----------------------------------------------------------------------------
-void vtkVolumeReconstructor::SetFanAngles(double* angles)
+void vtkVolumeReconstructor::SetFanAnglesDeg(double* anglesDeg)
 {
-  this->Reconstructor->SetFanAngles(angles);
+  this->Reconstructor->SetFanAnglesDeg(anglesDeg);
 }
 
 //----------------------------------------------------------------------------
-void vtkVolumeReconstructor::SetFanOrigin(double* origin)
+void vtkVolumeReconstructor::SetFanAngles(double* anglesDeg)
 {
-  this->Reconstructor->SetFanOrigin(origin);
+  LOG_WARNING("FanAngles volume reconstructor parameter is deprecated. Use FanAnglesDeg instead (with the same value).");
+  this->Reconstructor->SetFanAnglesDeg(anglesDeg);
 }
 
 //----------------------------------------------------------------------------
-void vtkVolumeReconstructor::SetFanDepth(double depth)
+void vtkVolumeReconstructor::SetFanOriginPixel(double* originPixel)
 {
-  this->Reconstructor->SetFanDepth(depth);
+  // Image coordinate system has unit spacing, so we can set the pixel values directly
+  this->Reconstructor->SetFanOrigin(originPixel);
+}
+
+//----------------------------------------------------------------------------
+void vtkVolumeReconstructor::SetFanOrigin(double* originPixel)
+{
+  LOG_WARNING("FanOrigin volume reconstructor parameter is deprecated. Use FanOriginPixels instead (with the same value).");
+  SetFanOriginPixel(originPixel);
+}
+
+//----------------------------------------------------------------------------
+void vtkVolumeReconstructor::SetFanRadiusStartPixel(double radiusPixel)
+{
+  // Image coordinate system has unit spacing, so we can set the pixel values directly
+  this->Reconstructor->SetFanRadiusStart(radiusPixel);
+}
+
+//----------------------------------------------------------------------------
+void vtkVolumeReconstructor::SetFanRadiusStopPixel(double radiusPixel)
+{
+  // Image coordinate system has unit spacing, so we can set the pixel values directly
+  this->Reconstructor->SetFanRadiusStop(radiusPixel);
+}
+
+//----------------------------------------------------------------------------
+void vtkVolumeReconstructor::SetFanDepth(double fanDepthPixel)
+{
+  LOG_WARNING("FanDepth volume reconstructor parameter is deprecated. Use FanRadiusStopPixels instead (with the same value).");
+  SetFanRadiusStopPixel(fanDepthPixel);
 }
 
 //----------------------------------------------------------------------------
@@ -795,7 +831,7 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 	int testY1 = vtkMath::Round(yOrigin + testRadius1*cos(vtkMath::RadiansFromDegrees(testTheta1[0])));
 	int testY2 = vtkMath::Round(yOrigin + testRadius2*cos(vtkMath::RadiansFromDegrees(testTheta2[0])));
 	int testY3 = vtkMath::Round(yOrigin + testRadius3*cos(vtkMath::RadiansFromDegrees(testTheta3[0])));
-	
+
 	// print screens for debugging
 	// std::cout << testX1 << std::endl;
 	// std::cout << testY1 << std::endl;
@@ -808,23 +844,23 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 	testValue1.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX1,testY1,0)));
 	testValue2.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX2,testY2,0)));
 	testValue3.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX2,testY2,0)));
-	
+
 	// run three while loops to populate the testValue vectors. Note that test x's and y's are not being retained.
 	int i = 0;
 
 	while (testTheta1[i] + thetaIncrement1 <= presetAngleRight) {
-	
+
 		testTheta1.push_back(testTheta1[i] + thetaIncrement1);
 		testX1 = vtkMath::Round(xOrigin + testRadius1*sin(vtkMath::RadiansFromDegrees(testTheta1[i+1])));
 		testY1 = vtkMath::Round(yOrigin + testRadius1*cos(vtkMath::RadiansFromDegrees(testTheta1[i+1])));
 		testValue1.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX1,testY1,0)));
 		//std::cout << (int) testValue1[i] << std::endl;
 		i++;
-	
+
 	}
-	
+
 	i = 0;
-	
+
 	while (testTheta2[i] + thetaIncrement2 <= presetAngleRight) {
 
 		testTheta2.push_back(testTheta2[i] + thetaIncrement2);
@@ -832,19 +868,19 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 		testY2 = vtkMath::Round(yOrigin + testRadius2*cos(vtkMath::RadiansFromDegrees(testTheta2[i+1])));
 		testValue2.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX2,testY2,0)));
 		i++;
-			
+
 	}
-	
+
 	i = 0;
-	
+
 	while (testTheta3[i] + thetaIncrement3 <= presetAngleRight) {
-	
+
 		testTheta3.push_back(testTheta3[i] + thetaIncrement3);
 		testX3 = vtkMath::Round(xOrigin + testRadius3*sin(vtkMath::RadiansFromDegrees(testTheta3[i+1])));
 		testY3 = vtkMath::Round(yOrigin + testRadius3*cos(vtkMath::RadiansFromDegrees(testTheta3[i+1])));
 		testValue3.push_back(*static_cast<unsigned char*>(frameImage->GetScalarPointer(testX3,testY3,0)));
 		i++;
-	
+
 	}
 
 	// Print lines for debugging
@@ -859,12 +895,12 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 	for (int i = 0; i < nRadii; i++) {
 
 		for (int j = 0; j < 2; j++) {
-		
+
 			fanAngles[i][j] = 0;
-			
+
 		}
 	}
-	
+
 	// variables for use in the loop
 	int nTheta1 = testTheta1.size();
 	int nTheta2 = testTheta2.size();
@@ -874,7 +910,7 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 	int state1 = bad;
 	int state2 = bad;
 	int state3 = bad;
-	
+
 	// create and initialize angle log
 	std::vector<double> left_log_1;
 	std::vector<double> right_log_1;
@@ -882,192 +918,192 @@ void vtkVolumeReconstructor::FanAngleDetector(vtkImageData* frameImage, double &
 	std::vector<double> right_log_2;
 	std::vector<double> left_log_3;
 	std::vector<double> right_log_3;
-	
+
 	left_log_1.push_back(presetAngleRight);
 	left_log_2.push_back(presetAngleRight);
 	left_log_3.push_back(presetAngleRight);
 	right_log_1.push_back(presetAngleRight);
 	right_log_2.push_back(presetAngleRight);
 	right_log_3.push_back(presetAngleRight);
-	
+
 	int j = nPix;
 
 	while (true) {
 
 		if (j <= nTheta1) {
-		
+
 			double testCount = 0;
 
 			for (int k = 0; k < nPix; k++) {
-			
+
 				if (testValue1[j - nPix + k] >= threshold) {testCount++;}
-			
+
 			}
-			
+
 			if (state1 == bad && testCount >= nPix/2.0) {
-			
+
 				left_log_1[left_log_1.size() - 1] = testTheta1[j - nPix];
 				state1 = good;
-			
+
 			} else if (state1 == good && testCount <= nPix/2.0 ) {
-			
+
 				right_log_1[right_log_1.size() - 1] = testTheta1[j - 1];
 				left_log_1.push_back(presetAngleRight);
 				right_log_1.push_back(presetAngleRight);
 				state1 = bad;
-				
+
 			}
-			
-			
-			
+
+
+
 		}
-	
+
 		if (j <= nTheta2) {
-		
+
 			double testCount = 0;
 
 			for (int k = 0; k < nPix; k++) {
-			
+
 				if (testValue2[j - nPix + k] >= threshold) {testCount++;}
-			
+
 			}
-			
+
 			if (state2 == bad && testCount >= nPix/2.0) {
-			
+
 				left_log_2[left_log_2.size() - 1] = testTheta2[j - nPix];
 				state2 = good;
-			
+
 			} else if (state2 == good && testCount <= nPix/2.0 ) {
-			
+
 				right_log_2[right_log_2.size() - 1] = testTheta2[j - 1];
 				left_log_2.push_back(presetAngleRight);
 				right_log_2.push_back(presetAngleRight);
 				state2 = bad;
-				
+
 			}
-			
-			
-			
+
+
+
 		}
 
 		if (j <= nTheta3) {
-		
+
 			double testCount = 0;
 
 			for (int k = 0; k < nPix; k++) {
-			
+
 				if (testValue3[j - nPix + k] >= threshold) {testCount++;}
-			
+
 			}
-			
+
 			if (state3 == bad && testCount >= nPix/2.0) {
-			
+
 				left_log_3[left_log_3.size() - 1] = testTheta3[j - nPix];
 				state3 = good;
-			
+
 			} else if (state3 == good && testCount <= nPix/2.0 ) {
-			
+
 				right_log_3[right_log_3.size() - 1] = testTheta3[j - 1];
 				left_log_3.push_back(presetAngleRight);
 				right_log_3.push_back(presetAngleRight);
 				state3 = bad;
-				
+
 			}
-			
-			
+
+
 		} else {
 
 			break;
-			
+
 		}
-		
+
 		j++; 
 
 	}
-	
+
 	std::cout << "Completed the detection loop?!" << std::endl;
-	
+
 	// pick the largest continuous area of pixel value for each test radius and send it to fanAngles
-	
+
 	fanAngles[test1][left] = left_log_1[0];
 	fanAngles[test1][right] = right_log_1[0];
-	
+
 	for (int k = 0; k < left_log_1.size(); k++) {
-	
+
 		if ( (right_log_1[k] - left_log_1[k]) > (fanAngles[test1][right] - fanAngles[test1][left]) ) {
-		
+
 			fanAngles[test1][left] = left_log_1[k];
 			fanAngles[test1][right] = right_log_1[k];
-		
+
 		}
-	
+
 	}
-	
+
 	// std::cout << "log 1" << std::endl;
 	// std::cout << left_log_1 << std::endl;
 	// std::cout << right_log_1 << std::endl;
-	
+
 	fanAngles[test2][left] = left_log_2[0];
 	fanAngles[test2][right] = right_log_2[0];
-	
+
 	for (int k = 0; k < left_log_2.size(); k++) {
-	
+
 		if ( (right_log_2[k] - left_log_2[k]) > (fanAngles[test2][right] - fanAngles[test2][left]) ) {
-		
+
 			fanAngles[test2][left] = left_log_2[k];
 			fanAngles[test2][right] = right_log_2[k];
-		
+
 		}
-	
+
 	}
-	
+
 	// std::cout << "log 2" << std::endl;
 	// std::cout << left_log_2 << std::endl;
 	// std::cout << right_log_2 << std::endl;
-	
+
 	fanAngles[test3][left] = left_log_3[0];
 	fanAngles[test3][right] = right_log_3[0];
-	
+
 	for (int k = 0; k < left_log_3.size(); k++) {
-	
+
 		if ( (right_log_3[k] - left_log_3[k]) > (fanAngles[test3][right] - fanAngles[test3][left]) ) {
-		
+
 			fanAngles[test3][left] = left_log_3[k];
 			fanAngles[test3][right] = right_log_3[k];
-		
+
 		}
-	
+
 	}
-	
-	
+
+
 	// std::cout << "log 3" << std::endl;
 	// std::cout << left_log_3 << std::endl;
 	// std::cout << right_log_3 << std::endl;
-	
+
 	// search for the broadest of the three angular windows and set them as the outputs
 	// broadest in case there's a ventricle or something
 	outputAngleLeft = fanAngles[test1][left];
 	outputAngleRight = fanAngles[test1][right];
-	
+
 	for (int ii = 1; ii < nRadii; ii++) {
-	
+
 		if ( (fanAngles[ii][right] - fanAngles[ii][left]) < (outputAngleRight - outputAngleLeft) ) {
-		
+
 			outputAngleLeft = fanAngles[ii][left];
 			outputAngleRight = fanAngles[ii][right];
-		
+
 		}
-	
+
 	}
-	
+
 	// set the blank frame case (i.e. both angles = presetRightAngle) to be 0 degrees for consistency
 	if (outputAngleLeft == presetAngleRight && outputAngleRight == presetAngleRight) {
-	
+
 		outputAngleLeft = 0;
 		outputAngleRight = 0;
-	
+
 	}
-	
+
 	// apply a buffer if necessary 
 	if (outputAngleLeft != 0) {outputAngleLeft = outputAngleLeft - buffer;}
 	if (outputAngleRight != 0) {outputAngleRight = outputAngleRight + buffer;}
