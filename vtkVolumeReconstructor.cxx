@@ -28,6 +28,11 @@
 
 #include "metaImage.h"
 
+#include "vtkMath.h"
+#include <cmath>
+#include <vector>
+#include <iostream>
+
 vtkCxxRevisionMacro(vtkVolumeReconstructor, "$Revisions: 1.0 $");
 vtkStandardNewMacro(vtkVolumeReconstructor);
 
@@ -437,7 +442,7 @@ PlusStatus vtkVolumeReconstructor::AddTrackedFrame(TrackedFrame* frame, vtkTrans
   // std::cout << "Initialized some variables" << std::endl;
 
   // get current fan angle and origin
-  this->Reconstructor->GetFanAngles(currentLeftAngle, currentRightAngle);
+  this->Reconstructor->GetFanAnglesDeg(currentLeftAngle, currentRightAngle);
   this->Reconstructor->GetFanOrigin(xOrigin, yOrigin);
   
   // std::cout << "Initial Left Angle" << currentLeftAngle << std::endl;
@@ -451,7 +456,7 @@ PlusStatus vtkVolumeReconstructor::AddTrackedFrame(TrackedFrame* frame, vtkTrans
   std::cout << "We finished the voodoo?" << std::endl;
 
   // implement and wrap up 
-  this->Reconstructor->SetFanAngles(detectedLeftAngle, detectedRightAngle);
+  this->Reconstructor->SetFanAnglesDeg(detectedLeftAngle, detectedRightAngle);
   PlusStatus temp;
   
   if (detectedLeftAngle > -10.0 && detectedRightAngle < 10.0) {
@@ -465,7 +470,7 @@ PlusStatus vtkVolumeReconstructor::AddTrackedFrame(TrackedFrame* frame, vtkTrans
   
   }  
 
-  this->Reconstructor->SetFanAngles(currentLeftAngle, currentRightAngle); 
+  this->Reconstructor->SetFanAnglesDeg(currentLeftAngle, currentRightAngle); 
   return temp;
 
   // restore original fan angles
